@@ -52,76 +52,163 @@ void sunetCastig()
     digitalWrite(BUZZER_PIN, HIGH);
 }
 
+void sunetGameOver() 
+{
+    digitalWrite(BUZZER_PIN, LOW); 
+    delay(1000);
+    digitalWrite(BUZZER_PIN, HIGH);
+}
+
 void joaca_cu_bucle() 
 {
     lcd.clear();
     lcd.print("Joc Pornit!");
     unsigned long timpStart = millis();
     
-    for(int i=0; i<4; i++) 
+    for(int i=0; i<4; i++) //stergem tot de pe matricea de led uri
       lc.clearDisplay(i);
 
-    for (int modul = 0; modul < 4; modul++) 
+    int prevBlocPozitie = 0; 
+    int prevBlocLatime = 4;  
+    bool gameOver = false;   
+    
+    long scor = 0; 
+    int cicluInfinit = 0; 
+
+    while (gameOver == false) 
     {
-        for (int rand = 7; rand >= 0; rand--) 
+        for (int modul = 0; modul < 4; modul++) //trecem prin cele 4 module de cate 8 randuri
         {
-            int blocPozitie = 0;
-            int blocDirectie = 1;
-            int blocLatime = 4; 
-            bool blocPlasat = false; 
-            unsigned long timpMiscare = 0;
+            if (gameOver == true) 
+                break;
 
-            while (blocPlasat == false) 
-            {   
-                if (millis() - timpMiscare > viteza) 
+            for (int rand = 7; rand >= 0; rand--) //trecem pe randuri (sunt numerotate de la 7 jos si 0 sus)
+            {
+                if (gameOver) 
+                    break;
+                if (cicluInfinit > 0 && modul == 0 && rand == 7) //daca am terminat un ciclu pana sus resetam pe primul nivel cu ceea ce a ramas initial
                 {
-                    timpMiscare = millis();
-                    for(int i=0; i<blocLatime; i++) 
-                    {
-                         if(blocPozitie + i < 8) 
-                            lc.setLed(modul, blocPozitie + i, rand, false);
-                    }
-
-                    blocPozitie += blocDirectie;
-                    if (blocPozitie >= (8 - blocLatime) || blocPozitie <= 0) 
-                    {
-                        blocDirectie *= -1;
-                    }
-
-                    for(int i=0; i<blocLatime; i++) 
-                    {
-                        if(blocPozitie + i < 8)
-                            lc.setLed(modul, blocPozitie + i, rand, true);
-                    }
+                    for(int i = 0; i < prevBlocLatime; i++) 
+                        lc.setLed(modul, prevBlocPozitie + i, rand, true);
+                    continue; 
                 }
-                
-                int stareBtn = digitalRead(BTN_START);
-                if (stareBtn == LOW) // trecem mai sus
+
+                int blocPozitie = 0;
+                int blocDirectie = 1;
+                int blocLatime = prevBlocLatime; 
+                bool blocPlasat = false; 
+                unsigned long timpMiscare = 0;
+
+                while (blocPlasat == false) //logica pentru plasarea blocurilor
+                {   
+                    if (millis() - timpMiscare > viteza) //cu cat viteza e mai mare cu atat plasam mai incet blocurile
+                    {
+                        timpMiscare = millis();
+                        for(int i=0; i<blocLatime; i++) 
+                        {
+                             if(blocPozitie + i < 8) 
+                                lc.setLed(modul, blocPozitie + i, rand, false);//stergem punctele trecute
+                        }
+
+                        blocPozitie += blocDirectie;
+                        if (blocPozitie >= (8 - blocLatime) || blocPozitie <= 0) //verificam in ce parte mergem
+                        {
+                            blocDirectie *= -1;
+                        }
+
+                        for(int i=0; i<blocLatime; i++) 
+                        {
+                            if(blocPozitie + i < 8)
+                                lc.setLed(modul, blocPozitie + i, rand, true);//aprindem punctele actuale
+                        }
+                    }
+                    
+                    int stareBtn = digitalRead(BTN_START);
+                    if (stareBtn == LOW) 
+                    {
+                        blocPlasat = true; 
+                        sunetPlasare(); 
+                        delay(300); 
+                    }
+                } 
+
+                if (!(modul == 0 && rand == 7 && cicluInfinit == 0)) // daca nu suntem la baza verificam blocurile puse
                 {
-                    blocPlasat = true; 
-                    sunetPlasare(); 
-                    delay(300); 
+                    int curentStart = blocPozitie;
+                    int curentEnd = blocPozitie + blocLatime;
+                    int prevStart = prevBlocPozitie;
+                    int prevEnd = prevBlocPozitie + prevBlocLatime;
+
+                    int suprapunereStart = max(curentStart, prevStart); // verificam daca se suprapun blocurile
+                    int suprapunereEnd = min(curentEnd, prevEnd);
+                    int suprapunereLatime = suprapunereEnd - suprapunereStart;
+
+                    if (suprapunereLatime <= 0) //daca nu avem suprapuse pierdem
+                    {
+                        gameOver = true;
+                        lcd.clear();
+                        lcd.print("GAME OVER!");
+                        lcd.setCursor(0, 1);
+                        lcd.print("Score: ");
+                        lcd.print(scor);
+                        sunetGameOver();
+                        delay(4000);
+                    }
+                        else //daca nu continuam jocul si plasam blocurile in continuare
+                        {
+                            for(int i=0; i<8; i++) 
+                                lc.setLed(modul, i, rand, false);//stergem blocurile vechi
+                            for(int i=0; i<suprapunereLatime; i++) 
+                            {
+                                lc.setLed(modul, suprapunereStart + i, rand, true);//le punem pe cele ramase
+                            }
+                            prevBlocLatime = suprapunereLatime;
+                            prevBlocPozitie = suprapunereStart;
+                            scor += suprapunereLatime; 
+                        }
+                }
+                else 
+                {
+                    prevBlocLatime = blocLatime;
+                    prevBlocPozitie = blocPozitie;
+                    scor += prevBlocLatime; 
                 }
             } 
         } 
+
+        if (gameOver) 
+            break;
+
+        if (level == 4) //daca suntem la nivelul infinit crestem viteza si reinitializam matricea de led uri in cazul in care am ajuns la finalul ei
+        {
+            cicluInfinit++;
+            if (viteza >= 50)
+                viteza = viteza - 10;
+            for(int i = 0; i < 4; i++) lc.clearDisplay(i);
+        }
+        else //daca nu terminam jocul si afisam pe lcd
+        {
+            unsigned long timpFinal = millis();
+            float secundeJucate = (timpFinal - timpStart) / 1000.0;
+            lcd.clear();
+            lcd.print("WIN! Score:");
+            lcd.print(scor);
+            lcd.setCursor(0, 1);
+            lcd.print("Timp: "); lcd.print(secundeJucate); lcd.print("s");
+            sunetCastig(); 
+            delay(4000);
+            break; 
+        }
     } 
 
-    unsigned long timpFinal = millis();
-    float secundeJucate = (timpFinal - timpStart) / 1000.0;
-
-    lcd.clear();
-    lcd.print("CASTIGATOR!");
-    lcd.setCursor(0, 1);
-    lcd.print("Timp: ");
-    lcd.print(secundeJucate);
-    lcd.print("s");
-    
-    sunetCastig(); 
-    
-    delay(4000);
     jocPornit = false; 
     select_level();
 }
+
+
+
+
+
 
 void setup() 
 {
@@ -136,14 +223,20 @@ void setup()
     
     pinMode(BTN_SCHIMBA, INPUT_PULLUP); 
     pinMode(BTN_START, INPUT_PULLUP);
+    
     pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(BUZZER_PIN, HIGH); //initializam high, canta pe low
+    digitalWrite(BUZZER_PIN, HIGH); 
+    
     select_level();      
 }
 
+
+
+
+
 void loop() 
 {
-    if (jocPornit == false) 
+    if (jocPornit == false) //daca nu e pornit jocul avem logica pentru alegerea nivelului
     {
         int stareSchimba = digitalRead(BTN_SCHIMBA);
         int stareStart = digitalRead(BTN_START);
@@ -157,13 +250,18 @@ void loop()
         }
         lastStateSchimba = stareSchimba;
 
-        if (stareStart == LOW && lastStateStart == HIGH) 
+        if (stareStart == LOW && lastStateStart == HIGH) //incepem jocul
         {
+            if(level == 1) viteza = 200;
+            if(level == 2) viteza = 70;
+            if(level == 3) viteza = 40;
+            if(level == 4) viteza = 200;
+
             jocPornit = true;
         }
         lastStateStart = stareStart;
     } 
-    else 
+    else //incepem jocul 
     {
         joaca_cu_bucle();
     }
